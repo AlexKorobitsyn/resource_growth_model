@@ -2,9 +2,30 @@
 import numpy as np
 from model_params import params
 
+def stationary_point_exists(params, verbose=True):
+    alpha = params['alpha']
+    beta = params['beta']
+    b = params.get('b', 0.04)
+    rho = params['rho']
+
+    lower = b / alpha
+    upper = beta * (1 - b / (alpha * beta))
+
+    exists = (lower < rho < upper)
+    if verbose:
+        print(f"Проверка условия существования стационарной точки:")
+        print(f"  b/alpha = {lower:.4f}")
+        print(f"  upper = {upper:.4f}")
+        print(f"  rho = {rho:.4f}")
+        if exists:
+            print("Условие выполнено: стационарная точка существует.")
+        else:
+            print("Условие НЕ выполнено: стационарная точка НЕ существует для этих параметров!")
+    return exists
+
 
 def stationary_point(params):
-
+    stationary_point_exists(params, verbose=True)  # Проверка!
     alpha = params['alpha']
     beta = params['beta']
     mu = params['mu']

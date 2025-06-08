@@ -8,7 +8,7 @@ def hamiltonian_rhs(t, Y, params):
     M0 = params['M0']
     p0 = params['p0']
     a = params['a']
-    b = params.get('b', 0.04)
+    b = params.get('b')
     rho = params['rho']
 
 
