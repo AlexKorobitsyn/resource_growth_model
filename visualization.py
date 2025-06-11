@@ -8,7 +8,6 @@ def plot_3d_trajectory(xs, ys, zs, x_star=None, sphere_radius=0.05):
     if x_star is not None:
         fig.add_trace(go.Scatter3d(x=[x_star[0]], y=[x_star[1]], z=[x_star[2]], mode='markers',
                                    marker=dict(size=8, color='red'), name='Stationary Point'))
-        # Optional: draw a sphere around stationary point
         u, v = np.mgrid[0:2*np.pi:20j, 0:np.pi:10j]
         X = x_star[0] + sphere_radius * np.cos(u) * np.sin(v)
         Y = x_star[1] + sphere_radius * np.sin(u) * np.sin(v)

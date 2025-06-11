@@ -25,7 +25,7 @@ def stationary_point_exists(params, verbose=True):
 
 
 def stationary_point(params):
-    stationary_point_exists(params, verbose=True)  # Проверка!
+    stationary_point_exists(params, verbose=True)
     alpha = params['alpha']
     beta = params['beta']
     mu = params['mu']
@@ -33,14 +33,12 @@ def stationary_point(params):
     p0 = params['p0']
     a = params['a']
     M0 = params['M0']
-    b = params.get('b', 0.04)  # b — это коэффициент из статьи, можно подбирать
+    b = params.get('b', 0.04)
 
-    # Формулы для A*, B* (по статье)
     A_star = ((rho - b/alpha) * ((1 - alpha) * rho**2 + (alpha * beta - b) * (mu + rho))) / ((1 - alpha) * rho**2)
     B_star = (alpha * (1 - alpha) * rho**2 * (beta - rho) + b * (alpha * beta - b) * (rho + mu)) / (
         alpha * rho * (1 - alpha) * (rho + alpha * mu))
 
-    # Теперь по картинке:
     z1_star = A_star * B_star / (rho - b / alpha)
     z2_star = 1 / rho * (1 - b / alpha * z1_star)
     z3_star = mu / rho * z2_star - (1 - alpha) / (alpha * rho) * (1 + A_star * B_star)

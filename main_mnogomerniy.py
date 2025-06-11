@@ -7,11 +7,10 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 def fibonacci_sphere_points(n, radius=1.0, center=None):
-    # Генерация равномерных точек на сфере, вокруг center (обычно x_star)
     points = []
-    phi = np.pi * (3. - np.sqrt(5.))  # golden angle
+    phi = np.pi * (3. - np.sqrt(5.))
     for i in range(n):
-        y = 1 - (i / float(n - 1)) * 2  # y goes from 1 to -1
+        y = 1 - (i / float(n - 1)) * 2
         radius_xy = np.sqrt(1 - y * y)
         theta = phi * i
         x = np.cos(theta) * radius_xy
@@ -20,6 +19,7 @@ def fibonacci_sphere_points(n, radius=1.0, center=None):
         if center is not None:
             pt = center + pt
         points.append(pt)
+    points.append(x_star)
     return np.array(points)
 
 
@@ -28,38 +28,33 @@ def valid_initial_point(X0):
     return np.all(X0 > 0)
 
 if __name__ == "__main__":
-    # 1. Стационарная точка и полный вектор Y*
     x_star, z_star = stationary_point(params)
     Y_star = np.concatenate([x_star, z_star])
     print("Стационарная точка x*:", x_star)
     print("Стационарная точка z*:", z_star)
 
-    # 2. Якобиан и собственные векторы в стационарной точке
     J = numerical_jacobian(hamiltonian_rhs, Y_star, params)
     eigvals, eigvecs, stable_idx, _ = get_stable_subspace(J)
     H11, H12 = build_H11_H12(eigvecs, stable_idx)
     print("H11:\n", H11)
     print("H12:\n", H12)
 
-    # 3. Генерируем N точек на сфере вокруг x*
-    n_traj = 16
-    sphere_radius = 0.14 * np.linalg.norm(x_star)  # можешь уменьшить или увеличить для плотности
+    n_traj = 30
+    sphere_radius = 0.75 * np.linalg.norm(x_star)  # можно уменьшить или увеличить
     points_x = fibonacci_sphere_points(n_traj, radius=sphere_radius, center=x_star)
 
-    # 4. Для каждой точки на сфере вычисляем индивидуальный z₀ и стартуем свою траекторию
     start_points = []
     for pt in points_x:
         if not valid_initial_point(pt):
-            continue  # фильтруем некорректные точки, если вышли в x < 0
+            continue
         # z0 = z_star + H12 @ inv(H11) @ (pt - x_star)
-        H11_reg = H11 + np.eye(3) * 1e-10  # регуляризация на случай вырождения
+        H11_reg = H11 + np.eye(3) * 1e-10
         z0 = z_star + H12 @ np.linalg.pinv(H11_reg) @ (pt - x_star)
         Y0 = np.concatenate([pt, z0])
         start_points.append(Y0)
 
     print(f"Будет построено {len(start_points)} траекторий")
 
-    # 5. Интегрируем систему для каждой точки (вперёд по времени)
     T_max = 30
 
 
@@ -72,7 +67,7 @@ if __name__ == "__main__":
     limit_event.direction = 0
 
     all_xs, all_ys, all_zs = [], [], []
-    starts, ends = [], []
+    starts, ends, directions = [], [], []
 
     for Y0 in start_points:
         x1, x2, x3 = Y0[:3]
@@ -90,63 +85,121 @@ if __name__ == "__main__":
         all_xs.append(xs)
         all_ys.append(ys)
         all_zs.append(zs)
+        dx = xs[1] - xs[0]
+        dy = ys[1] - ys[0]
+        dz = zs[1] - zs[0]
+        directions.append([dx, dy, dz])
         starts.append([xs[0], ys[0], zs[0]])
         ends.append([xs[-1], ys[-1], zs[-1]])
 
-    # 6. Визуализация с траекториями и стрелочками
     import plotly.graph_objects as go
-
-    # Ограничиваем конечные точки, чтобы не выходили за пределы ±15 по любой оси
+    maxDx = max(directions[:][0])
+    maxDy = max(directions[:][1])
+    maxDz = max(directions[:][2])
+    directions1 = []
+    normMax = np.linalg.norm([maxDx, maxDy, maxDz])
+    for dx, dy, dz in directions:
+        norm1 = np.linalg.norm([dx, dy, dz])
+        norm = normMax/norm1
+        if norm == 0:
+            directions1.append([0, 0, 0])
+        else:
+            directions1.append([dx*norm, dy* norm, dz* norm])
     ends = np.array(ends)
     ends_clipped = np.clip(ends, -15, 15)
-    directions = ends_clipped - starts  # стрелки тоже пересчитываем!
 
     fig = go.Figure()
     u, v = np.mgrid[0:2 * np.pi:50j, 0:np.pi:25j]
     X = x_star[0] + sphere_radius * np.cos(u) * np.sin(v)
     Y = x_star[1] + sphere_radius * np.sin(u) * np.sin(v)
     Z = x_star[2] + sphere_radius * np.cos(v)
+    i=0
+    print("stable_idx", stable_idx)
+    for vec in eigvecs.T:
+        i+=1
+        vec = np.real(vec)
+        if i-1 in stable_idx:
+            fig.add_trace(go.Scatter3d(
+                x=[x_star[0] , x_star[0] + vec[0]],
+                y=[x_star[1] , x_star[1] + vec[1]],
+                z=[x_star[2] , x_star[2] + vec[2]],
+                mode='lines',
 
-    # Сама сфера (прозрачная, только граница)
+                line=dict(dash='dot', color='red'),
+                name=f'Отрицательный собственный вектор №{i}'
+            ))
+        else:
+            fig.add_trace(go.Scatter3d(
+                x=[x_star[0] , x_star[0] + vec[0]],
+                y=[x_star[1] , x_star[1] + vec[1]],
+                z=[x_star[2] , x_star[2] + vec[2]],
+                mode='lines',
+
+                line=dict(dash='dot', color='blue'),
+                name=f'Положительный собственный вектор №{i}'
+            ))
+
     fig.add_trace(go.Surface(
         x=X, y=Y, z=Z, opacity=0.15, showscale=False, colorscale=[[0, "lightblue"], [1, "lightblue"]],
         name="Initial sphere"
     ))
-    # Фазовые траектории
+    i = 0
+    custom_colorscale = [[0, 'blue'], [0.5, 'green'], [1, 'red']]
     for xs, ys, zs in zip(all_xs, all_ys, all_zs):
-        fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode='lines'))
+        i+=1
+        fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode='lines', name=f'Траектория №{i}', legendgroup=f'traj{i}', marker=dict(color=[0, 0.5, 1], colorscale=custom_colorscale)))
 
-    # Стационарная точка (красная)
     fig.add_trace(go.Scatter3d(
         x=[x_star[0]], y=[x_star[1]], z=[x_star[2]],
         mode='markers', marker=dict(size=10, color='red'), name='Stationary Point'
     ))
+    Hs = np.vstack([H11, H12])
+    Hs = Hs / np.linalg.norm(Hs, axis=0)
 
-    # Начальные точки (синие)
+
+    def project_to_stable_subspace(delta):
+        return Hs @ (Hs.T @ delta)
+
+
+
+
     starts = np.array(starts)
     fig.add_trace(go.Scatter3d(
         x=starts[:, 0], y=starts[:, 1], z=starts[:, 2],
         mode='markers', marker=dict(size=6, color='blue', symbol='circle'), name='Start'
     ))
 
-    # Конечные точки (зелёные)
+
     ends = np.array(ends)
-    # Конечные точки (зелёные)
     fig.add_trace(go.Scatter3d(
         x=ends_clipped[:, 0], y=ends_clipped[:, 1], z=ends_clipped[:, 2],
         mode='markers', marker=dict(size=6, color='green', symbol='diamond'), name='End'
     ))
+    norms = [np.linalg.norm(vec) for vec in directions]
+    max_norm = max(norms)
+    sizerefs = [0.1 * (max_norm / n) if n > 1e-8 else 0.1 for n in norms]
+    directions1 = np.array(directions)
+    # fig.add_trace(go.Scatter3d(
+    #     x=[starts[:, 0], -directions1[:, 0]],
+    #     y=[starts[:, 1], -directions1[:, 1]],
+    #     z=[starts[:, 2], -directions1[:, 2]],
+    #     mode='lines+markers',
+    #     marker=dict(size=2, color='black'),
+    #     line=dict(width=5, color='orange'),
+    #     name='Vector' if i == 0 else None,  # Чтобы в легенде было только один раз
+    #     showlegend=(i == 0)
+    # ))
+    for i in range(len(starts)):
+        fig.add_trace(go.Cone(
+            x=[starts[i][0]], y=[starts[i][1]], z=[starts[i][2]],
+            u=[-directions[i][0]], v=[-directions[i][1]], w=[-directions[i][2]],
+            sizemode="scaled", sizeref=sizerefs[i],
+            anchor='tail', showscale=False, colorscale='Viridis',
+            name='Direction' if i == 0 else None,
+            legendgroup=f'traj{i+1}',
+            showlegend=(i == 0)
+        ))
 
-    # Стрелки направления (cones)
-    fig.add_trace(go.Cone(
-        x=starts[:, 0], y=starts[:, 1], z=starts[:, 2],
-        u=directions[:, 0], v=directions[:, 1], w=directions[:, 2],
-        colorscale='Viridis', sizemode="absolute", sizeref=0.3,
-        showscale=False, anchor='tail', name='Direction'
-    ))
-
-    # Рисуем прозрачную сферу (поверхность, на которой лежат начальные точки)
-    # Центр = x_star, радиус = sphere_radius
 
     fig.update_layout(
         scene=dict(
