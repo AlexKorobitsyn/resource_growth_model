@@ -38,17 +38,12 @@ if __name__ == "__main__":
     print("H11:\n", H11)
     print("H12:\n", H12)
 
-    n_traj = 30
-    sphere_radius = 0.01 * np.linalg.norm(x_star)
-
-    points_x = fibonacci_sphere_points(10, radius=sphere_radius, center=x_star)
-    # points_x = np.concatenate(( points_x , (fibonacci_sphere_points(10, radius=0.05 * np.linalg.norm(x_star) , center=x_star))), axis=0)
-    # points_x = np.concatenate((points_x, (fibonacci_sphere_points(10, radius=0.15 * np.linalg.norm(x_star) , center=x_star))), axis=0)
-    # points_x = np.concatenate((points_x, (fibonacci_sphere_points(10, radius=0.25 * np.linalg.norm(x_star) , center=x_star))), axis=0)
-    # points_x = np.concatenate((points_x, (fibonacci_sphere_points(40, radius=0.55 * np.linalg.norm(x_star) , center=x_star))), axis=0)
-    # points_x = np.concatenate((points_x, (fibonacci_sphere_points(40, radius=0.75 * np.linalg.norm(x_star) , center=x_star))), axis=0)
-
-    n_traj = 120
+    sphere_radius = 0.005 * np.linalg.norm(x_star)
+    points_x = fibonacci_sphere_points(30, radius=sphere_radius, center=x_star)
+    points_x = np.concatenate((points_x, fibonacci_sphere_points(30, radius=0.1 * np.linalg.norm(x_star), center=x_star)), axis=0)
+    points_x = np.concatenate((points_x, fibonacci_sphere_points(30, radius=0.2 * np.linalg.norm(x_star), center=x_star)), axis=0)
+    points_x = np.concatenate((points_x, fibonacci_sphere_points(30, radius=0.5 * np.linalg.norm(x_star), center=x_star)), axis=0)
+    points_x = np.concatenate((points_x, fibonacci_sphere_points(30, radius=0.8 * np.linalg.norm(x_star), center=x_star)), axis=0)
     start_points = []
     for pt in points_x:
         if not valid_initial_point(pt):
@@ -65,11 +60,16 @@ if __name__ == "__main__":
 
     def limit_event(t, y):
         x = y[:3]
-        return min(3 - x.max(), x.min())
+        return min(
+            np.min(x),
+            10 - np.max(x)
+        )
 
 
     limit_event.terminal = True
-    limit_event.direction = 0
+    limit_event.direction = -1
+
+
 
     all_xs, all_ys, all_zs = [], [], []
     starts, ends, directions = [], [], []
@@ -79,17 +79,30 @@ if __name__ == "__main__":
         if not (x1 > 0 and x2 > 0 and x3 > 0):
             print(f"Пропуск: стартовая x0 не вся > 0: {Y0[:3]}")
             continue
-        sol = solve_ivp(
+        sol_forward = solve_ivp(
             lambda t, y: hamiltonian_rhs(t, y, params),
             [0, T_max], Y0,
             max_step=0.1,
             rtol=1e-6, atol=1e-8,
             events=limit_event
         )
-        xs, ys, zs = sol.y[0], sol.y[1], sol.y[2]
-        all_xs.append(xs)
-        all_ys.append(ys)
-        all_zs.append(zs)
+        sol_backward = solve_ivp(
+            lambda t, y: hamiltonian_rhs(t, y, params),
+            [0, -T_max], Y0,
+            max_step=0.1,
+            rtol=1e-6, atol=1e-8,
+            events=limit_event
+        )
+        xs_full = np.concatenate([sol_backward.y[0][::-1], sol_forward.y[0]])
+        ys_full = np.concatenate([sol_backward.y[1][::-1], sol_forward.y[1]])
+        zs_full = np.concatenate([sol_backward.y[2][::-1], sol_forward.y[2]])
+
+        all_xs.append(xs_full)
+        all_ys.append(ys_full)
+        all_zs.append(zs_full)
+        xs = xs_full
+        ys = ys_full
+        zs = zs_full
         dx = xs[1] - xs[0]
         dy = ys[1] - ys[0]
         dz = zs[1] - zs[0]
@@ -151,9 +164,27 @@ if __name__ == "__main__":
     i = 0
     custom_colorscale = [[0, 'blue'], [0.5, 'green'], [1, 'red']]
     for xs, ys, zs in zip(all_xs, all_ys, all_zs):
-        i+=1
-        fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode='lines', name=f'Траектория №{i}', legendgroup=f'traj{i}', marker=dict(color=[0, 0.5, 1], colorscale=custom_colorscale)))
-
+        fig.add_trace(go.Scatter3d(
+            x=xs, y=ys, z=zs,
+            mode='lines',
+            line=dict(
+                width=3,
+                color=np.linspace(0, 1, len(xs)),
+                colorscale='Viridis'
+            ),
+            showlegend=False
+        ))
+        N = 10
+        for i in range(0, len(xs) - N, N):
+            uvec = xs[i + N] - xs[i]
+            vvec = ys[i + N] - ys[i]
+            wvec = zs[i + N] - zs[i]
+            fig.add_trace(go.Cone(
+                x=[xs[i]], y=[ys[i]], z=[zs[i]],
+                u=[uvec], v=[vvec], w=[wvec],
+                sizemode='scaled', sizeref=0.1,
+                anchor='tail', showscale=False, colorscale='Viridis'
+            ))
     fig.add_trace(go.Scatter3d(
         x=[x_star[0]], y=[x_star[1]], z=[x_star[2]],
         mode='markers', marker=dict(size=10, color='red'), name='Stationary Point'

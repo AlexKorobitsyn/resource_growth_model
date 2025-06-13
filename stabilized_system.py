@@ -14,7 +14,7 @@ def numerical_jacobian(rhs, Y_star, params, eps=1e-6):
 
 def get_stable_subspace(J):
     eigvals, eigvecs = np.linalg.eig(J)
-    idx = np.argsort(np.real(eigvals))  # От меньших к большим
+    idx = np.argsort(np.real(eigvals))
     stable_idx = idx[np.real(eigvals[idx]) < 0]
     unstable_idx = idx[np.real(eigvals[idx]) > 0]
     return eigvals, eigvecs, stable_idx, unstable_idx
